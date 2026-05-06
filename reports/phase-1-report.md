@@ -112,7 +112,9 @@ vast.ai 인스턴스 (RTX 4090 또는 동급) 한 시간이면 충분. 작업:
 
 ## GitHub PR
 
-PR URL: (커밋/푸시 후 본 보고서 발송 전에 채워짐. 발송 시점 메일 끝에 별도 메모로 첨부 또는 보고서 푸시 후 갱신)
+PR URL: **https://github.com/chjs/cacheblend-hf/pull/1**
+
+Branch: `phase-1-layerwise-forward` → `main`. 사용자 검토 후 머지하시면 됩니다 (이메일 받으신 후).
 
 ## Suggested next prompt for Claude Code
 
