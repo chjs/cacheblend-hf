@@ -137,7 +137,9 @@ benchmarks/phase3_sweep.py            | +130 (sweep + Insight 2)
 
 ## GitHub PR
 
-PR URL: (커밋/푸시 후 본 보고서 발송 직전에 채워짐)
+PR URL: **https://github.com/chjs/cacheblend-hf/pull/3**
+
+Branch: `phase-3-selective-recompute` → `main`. CI 녹색 확인 후 사용자 머지 권장.
 
 ## Suggested next prompt for Claude Code
 
