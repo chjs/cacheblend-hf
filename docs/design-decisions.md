@@ -65,6 +65,48 @@
 
 ---
 
+## [2026-05-06] <Phase 3> — Selective recompute via a single synthesis hook
+
+**Context**: Phase 3's core algorithm needs each layer to attend over a *mix*: cached K, V for tokens outside the HKVD set ``S``, fresh K, V (computed under the fused sequence's hidden flow) for tokens in ``S``. Phase 2's full-reuse hook returned cached values everywhere; Phase 3 needs to keep some fresh values and override the rest.
+
+**Options considered**:
+1. Two-pass approach — run each layer once with no override (capture fresh K, V), then again with the synthesis. 2× compute per layer.
+2. Manually rewrite the per-layer body so K/V are explicitly built before attention.
+3. **Single-pass synthesis hook**: at the layer's ``k_proj`` / ``v_proj``, the forward hook receives the *fresh* projection output (since hooks run after the module). The hook returns ``where(keep_fresh_mask, fresh, cached_pre_rope)`` — fresh stays for HKVD positions, cached pre-RoPE replaces everywhere else. The layer then applies RoPE and attention as usual, getting the synthesized K/V.
+
+**Decision**: Option 3.
+
+**Reasoning**:
+- One pass per layer; no extra compute.
+- Reuses Phase 2's "hook returns pre-RoPE K, layer rotates with fused position_embeddings" mechanism — chunk-level RoPE shift stays implicit.
+- Falls out cleanly to the two sanity boundaries:
+  * ``ratio = 0`` → ``S`` is empty → mask is all-False → hook always returns cached → equivalent to full reuse.
+  * ``ratio = 1`` → ``S`` covers every cached-chunk position → mask is all-True → hook always returns fresh → equivalent to full recompute. Layer 0's cached pre-RoPE K equals fresh pre-RoPE K (embeddings are position-agnostic), so even layer 0 doesn't break this.
+
+**Consequences / things to revisit**:
+- ``k_proj`` / ``v_proj`` always run on the full hidden, even at ratio < 1 where most outputs will be discarded by the synth. Linears are cheap so this is fine; an optimization would slice hidden to the union of ``S`` and uncached positions.
+
+---
+
+## [2026-05-06] <Phase 3> — HKVD selection: single check_layer = 1, no per-layer narrowing in v1
+
+**Context**: The paper describes "gradual filtering": start with a slightly larger candidate set at layer 1, narrow it to ``r_target`` over the first half of layers. LMCache's actual implementation does **not** do this — it uses one ratio applied at a single check layer (usually layer 1) and keeps the same set ``S`` across all subsequent layers. We have to choose v1 behavior.
+
+**Options considered**:
+1. Implement gradual narrowing now.
+2. Implement only the single-check-layer fixed-S version, defer narrowing.
+
+**Decision**: Option 2. ``fuse_selective(check_layer=1)`` runs full reuse for layers ``< 1`` (i.e. just layer 0), picks ``S`` once at layer 1 from the squared-L2 deviation between fresh and cached K (both rotated to fused positions), then keeps that ``S`` for every subsequent layer.
+
+**Reasoning**:
+- Mirrors LMCache's actual code in ``LMCBlender.process_qkv``.
+- One free hyperparameter (``recompute_ratio``) instead of three (target ratio, start bonus, decay shape) — easier to interpret Phase 3's measurements.
+- ``gradual_ratio_schedule`` is implemented as a flat list returning ``[target_ratio] * num_layers`` — the function exists for Phase 5 to revisit if F1 demands it, but v1 ignores anything beyond ``schedule[check_layer]``.
+
+**Consequences**: If Phase 5's F1 vs full-recompute exceeds the 0.02 budget at ratio = 0.15, the first thing to try is gradual narrowing or per-layer ratio decay — not raising the constant ratio.
+
+---
+
 ## [2026-05-06] <Phase 2> — Inject cached K, V via forward hooks on k_proj / v_proj
 
 **Context**: Phase 2's full reuse needs to run a layerwise forward where K and V at every layer come from cached chunks instead of being computed from the current hidden state. We need a way to swap in cached tensors *before* RoPE/attention without rewriting the per-arch decoder layer.
