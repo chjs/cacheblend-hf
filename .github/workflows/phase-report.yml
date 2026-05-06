@@ -1,0 +1,43 @@
+name: Send phase report email
+
+# Triggered when a tag like `phase-1-complete` is pushed.
+# Set these GitHub repository secrets:
+#   GMAIL_ADDRESS
+#   GMAIL_APP_PASSWORD
+#   REPORT_EMAIL_TO
+
+on:
+  push:
+    tags:
+      - 'phase-*-complete'
+
+jobs:
+  send-report:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract phase number from tag
+        id: phase
+        run: |
+          # tag format: phase-N-complete
+          tag="${GITHUB_REF##*/}"
+          phase="${tag#phase-}"
+          phase="${phase%-complete}"
+          echo "number=$phase" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install email deps
+        run: pip install python-dotenv
+
+      - name: Send email
+        env:
+          GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          REPORT_EMAIL_TO: ${{ secrets.REPORT_EMAIL_TO }}
+        run: |
+          python scripts/send_report.py --phase ${{ steps.phase.outputs.number }}

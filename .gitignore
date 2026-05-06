@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual envs
+.venv/
+venv/
+env/
+
+# Environment
+.env
+.env.local
+
+# Local data
+data/
+# Cloned reference repos (e.g., external/LMCache)
+external/
+.cache/
+*.pkl
+*.pt
+*.bin
+*.safetensors
+
+# HF cache (if user puts here)
+hf_cache/
+
+# Reports — keep templates and STATUS, ignore generated assets
+reports/phase-*-attachments/
+
+# Editor
+.vscode/
+.idea/
+*.swp
+.DS_Store
