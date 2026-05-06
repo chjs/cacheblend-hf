@@ -117,7 +117,9 @@ tests/test_kv_reuse.py                | +110 (3 phase-2 tests)
 
 ## GitHub PR
 
-PR URL: (커밋/푸시 후 본 보고서 발송 직전에 채워짐)
+PR URL: **https://github.com/chjs/cacheblend-hf/pull/2**
+
+Branch: `phase-2-kv-storage` → `main`. CI 녹색 확인 후 사용자 머지 권장.
 
 ## Suggested next prompt for Claude Code
 
