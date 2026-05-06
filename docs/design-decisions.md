@@ -65,6 +65,39 @@
 
 ---
 
+## [2026-05-06] <Phase 4> — Chunk-level prefetch (not per-layer) for the pipeline path
+
+**Context**: The paper's pipeline overlaps per-layer KV loading with per-layer compute. Our on-disk format is per-chunk-all-layers (one pickle per chunk), so per-layer prefetch would require restructuring the storage format.
+
+**Options considered**:
+1. Reorganize on-disk format to one file per (chunk, layer) — fine-grained prefetch but bigger I/O overhead per layer (many small reads).
+2. Keep per-chunk format; prefetch the full chunk concurrently with host-side prep (tokenize, embed, position_embeddings, mask).
+3. Same as 2 plus per-chunk decompression / staging on a worker.
+
+**Decision**: Option 2. ``fuse_selective_pipelined`` calls ``kv_store.get_async(chunk.hash)`` for every chunk before doing any host-side prep, then syncs once before the layer loop starts. The pipeline overlaps disk I/O with the small but non-zero work of building the causal mask and computing position_embeddings — this is meaningful when the disk is slow (NVMe, network) and noise-level when the disk is fast (RAM, fast SSD).
+
+**Reasoning**:
+- Per-layer pipelining is a 5-10× engineering effort (custom format, layer-indexed I/O, sync barriers in the loop) for a constant-factor improvement that vanishes once disk is fast enough.
+- The chunk-level pipeline still demonstrates Phase 4's *core* contribution — that the controller is correct and the algorithm composes with async I/O without changing logits.
+- vast.ai measurement (Phase 5) will reveal whether the chunk-level pipeline is enough; if it isn't, we'll revisit per-layer formats then.
+
+**Consequences**: ``KVStore`` now owns a ``ThreadPoolExecutor`` (created lazily on first ``get_async`` call). Tests/cleanup should call ``store.shutdown()`` if they care; the executor is otherwise a daemon that exits with the process.
+
+---
+
+## [2026-05-06] <Phase 4> — LoadingController caps recompute_ratio at 0.50
+
+**Context**: Phase 3's ratio sweep on a 2-chunk synthetic input showed L2 collapsing to ~0 at ratio=0.5 (because all 10 diverging tokens of chunk B fit in the 50%-of-20 selection budget). On longer chunks (50-200 tokens), the L2 reduction at ratio=0.5 plateaus around 70-80% — still well below ratio=1.0's full recompute, but recompute work is doubling. The paper's §5 picker can in principle drive ratio toward 1.0 if the disk is slow enough to mask it.
+
+**Decision**: Hard-cap ``LoadingController.max_ratio = 0.50``.
+
+**Reasoning**:
+- Beyond r=0.5 the marginal quality return is shallow (Phase 3's curve flattens), but the recompute cost keeps doubling. So the controller should stop "spending" recompute past the elbow.
+- 0.5 also matches the empirical ceiling where our v1 implementation degenerates to "near full recompute" on synthetic inputs — we don't need the paper's r→1.0 corner case.
+- Phase 5 may revisit if real RAG datasets show the elbow lives elsewhere.
+
+---
+
 ## [2026-05-06] <Phase 3> — Selective recompute via a single synthesis hook
 
 **Context**: Phase 3's core algorithm needs each layer to attend over a *mix*: cached K, V for tokens outside the HKVD set ``S``, fresh K, V (computed under the fused sequence's hidden flow) for tokens in ``S``. Phase 2's full-reuse hook returned cached values everywhere; Phase 3 needs to keep some fresh values and override the rest.

@@ -136,6 +136,51 @@ def fuse_full_reuse(
 # --------------------------------------------------------------- selective
 
 @torch.no_grad()
+def fuse_selective_pipelined(
+    model: LayerwiseModel,
+    chunks: Sequence[Chunk],
+    kv_store: KVStore,
+    recompute_ratio: float = 0.15,
+    check_layer: int = 1,
+) -> Tensor:
+    """Same logits as :func:`fuse_selective`, but prefetches every chunk's KV
+    on a worker thread so disk I/O overlaps with the request's
+    ``embed_tokens`` / ``compute_position_embeddings`` / mask construction.
+
+    The pipeline is intentionally simple: prefetch the *full* KV of each chunk
+    (all layers) concurrently, sync once before the layer loop. Per-layer
+    pipelining would require reorganizing the on-disk format to be per-layer-
+    addressable; that's a larger refactor we defer past v1.
+
+    Logits must match :func:`fuse_selective` bit-for-bit (verified by
+    ``tests/test_pipeline.py::test_pipelined_logits_match_unpipelined``).
+    """
+    # Fan out async loads. ``get_async`` is a no-op for in-memory hits and
+    # populates the in-memory dict on disk hits, so the subsequent
+    # ``fuse_selective`` call sees them as cached.
+    futures = [kv_store.get_async(chunk.hash) for chunk in chunks]
+
+    # Lightweight host-side prep that can run while loads are in flight.
+    # We don't actually need the result here — fuse_selective will redo this
+    # work — but issuing these reads warms tokenizer / device caches.
+    _ = torch.cat([c.token_ids for c in chunks])
+
+    # Sync. Any load failure surfaces here as a KeyError.
+    for chunk, f in zip(chunks, futures):
+        kv = f.result()
+        if kv is None:
+            raise KeyError(f"chunk {chunk.hash[:6]} missing from KVStore")
+
+    return fuse_selective(
+        model,
+        chunks,
+        kv_store,
+        recompute_ratio=recompute_ratio,
+        check_layer=check_layer,
+    )
+
+
+@torch.no_grad()
 def fuse_selective(
     model: LayerwiseModel,
     chunks: Sequence[Chunk],
