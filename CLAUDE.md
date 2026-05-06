@@ -22,6 +22,15 @@
 4. **bit-exact 검증이 필요한 곳에서는 우회하지 않는다.** Phase 1의 layerwise forward는 표준 forward와 logit 차이 ≤ 1e-5 (FP16에서는 1e-3)이어야 한다. 통과 못하면 다음 phase로 넘어가지 않는다.
 5. **LMCache 코드를 그대로 복사하지 않는다.** 참고는 하되, 우리는 더 단순한 버전을 새로 쓴다. 어떤 부분을 차용했는지 `docs/lmcache-analysis.md`에 명시한다.
 
+## 🗂 Prompt archiving (every new user prompt)
+
+When the user sends a new prompt that initiates work (anything beyond a clarifying question), Claude Code:
+1. Before doing anything else, create `docs/prompts/phase-<N>-<slug>.md` with the full prompt text (no edits) and frontmatter (date, phase, topic).
+2. Commit it as a separate small commit: `git add docs/prompts/... && git commit -m "Archive prompt: phase-N-<slug>"`.
+3. Then start the actual work.
+
+The archived prompt is the canonical record. Boil it down in your own summary if you want, but don't mutate the original.
+
 ## 📝 Phase 완료 절차
 
 각 phase 작업이 끝났다고 판단되면:
