@@ -18,6 +18,7 @@ testpaths = ["tests"]
 markers = [
     "slow: tests that take >30s (run with `pytest -m slow`)",
     "gpu: tests requiring CUDA",
+    "requires_model: tests that download or load HF models (skipped in CI)",
 ]
 addopts = "-ra"
 

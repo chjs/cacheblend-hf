@@ -23,6 +23,7 @@ def _ids(tokenizer, text: str) -> torch.Tensor:
     return tokenizer(text, return_tensors="pt").input_ids
 
 
+@pytest.mark.requires_model
 @torch.no_grad()
 def test_layerwise_matches_standard(qwen_setup):
     """Per-layer prefill must reproduce standard ``model(...).logits`` bit-exactly."""
@@ -42,6 +43,7 @@ def test_layerwise_matches_standard(qwen_setup):
 
 
 @pytest.mark.slow
+@pytest.mark.requires_model
 @torch.no_grad()
 def test_layerwise_matches_standard_longer(qwen_setup):
     """Stress with a longer context to amplify any per-layer drift.
@@ -67,6 +69,7 @@ def test_layerwise_matches_standard_longer(qwen_setup):
     assert max_diff < 1e-5, f"layerwise vs standard logit mismatch: {max_diff:.3e}"
 
 
+@pytest.mark.requires_model
 @torch.no_grad()
 def test_kv_extraction(qwen_setup):
     """The KV captured by LayerwiseModel must match what HF stores in DynamicCache.

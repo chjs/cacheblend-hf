@@ -53,6 +53,18 @@
 
 ---
 
+## [2026-05-06] <Phase 1> — CI skips model-loading tests
+
+**Context**: Phase 1's CI run failed with `ImportError: No module named 'cacheblend'` because the workflow installed `requirements.txt` but never `pip install -e .`. Even after fixing that, every model-loading test would still try to download Qwen2.5-1.5B in CI — multi-GB, slow, and not what CI is for.
+
+**Decision**: Tag all tests that call `from_pretrained` (or otherwise materialize a real HF model) with `@pytest.mark.requires_model`. CI runs `pytest -v -m "not gpu and not slow and not requires_model"`. A new `tests/test_smoke.py` (3 import-only tests) provides the fast packaging-regression guard CI needs.
+
+**Reasoning**: Bit-exact correctness against a real model (Phase 1's core acceptance) belongs to local / vast.ai runs, not CI. CI's job is to catch packaging regressions early — that's what smoke tests cover.
+
+**Consequences / things to revisit**: If we later want CI to validate against a real model, host a tiny test model on the HF Hub or check in synthetic weights and tag those tests differently.
+
+---
+
 ## [2026-05-06] <Phase 1> — Use HF's standard decoder_layer + DynamicCache (no custom layer body)
 
 **Context**: LMCache's `LMCBaseModel.compute_layer` reaches inside `vllm_model.model.layers[i].self_attn.qkv_proj` and reimplements the per-layer flow (input_layernorm → qkv → RoPE → attention → o_proj → MLP). This was tempting to mirror, but we'd need a per-arch implementation (LMCache has separate `llama.py` / `qwen3.py`).
