@@ -139,7 +139,9 @@ reports/phase-4-report.md           | +N (이 파일)
 
 ## GitHub PR
 
-PR URL: TBD (commit/push 후 갱신).
+PR URL: **https://github.com/chjs/cacheblend-hf/pull/4**
+
+Branch: `phase-4-pipelining` → `main`. CI 녹색 확인 후 사용자 머지 권장.
 
 ## Suggested next prompt for Claude Code
 
